@@ -4,7 +4,12 @@
 //
 // To use your own pictures instead, add them to BIOME_IMAGES below (biome name -> image URL),
 // e.g. "plains": "img/biomes/plains.jpg". Any biome without an image falls back to the drawing.
-export const BIOME_IMAGES = {};
+export const BIOME_IMAGES = {
+  "rocky canyons": "img/biomes/rocky-canyons.png",
+  "acidic badlands": "img/biomes/acidic-badlands.webp",
+  "desert cliffs": "img/biomes/desert-cliffs.webp",
+  "desert dunes": "img/biomes/desert-dunes.webp",
+};
 
 const W = 400;
 const H = 160;
