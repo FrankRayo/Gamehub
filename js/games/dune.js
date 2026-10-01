@@ -25,16 +25,17 @@ function persist(bases) {
 }
 
 function split(ms) {
-  const t = Math.max(0, Math.floor(ms / 60000));
-  return { d: Math.floor(t / 1440), h: Math.floor((t % 1440) / 60), m: t % 60 };
+  const t = Math.max(0, Math.floor(ms / 1000));
+  return { d: Math.floor(t / 86400), h: Math.floor((t % 86400) / 3600), m: Math.floor((t % 3600) / 60), s: t % 60 };
 }
+// Live countdown on each base card, down to the second.
 function countHTML(ms) {
-  const { d, h, m } = split(ms);
-  return (d ? `${d}<small>d</small>` : "") + `${pad(h)}<small>h</small>${pad(m)}<small>m</small>`;
+  const { d, h, m, s } = split(ms);
+  return (d ? `${d}<small>d</small>` : "") + `${pad(h)}<small>h</small>${pad(m)}<small>m</small>${pad(s)}<small>s</small>`;
 }
-function countText(ms) {
-  const { d, h, m } = split(ms);
-  return (d ? `${d}d ` : "") + `${pad(h)}h ${pad(m)}m`;
+function countText(ms, seconds = false) {
+  const { d, h, m, s } = split(ms);
+  return (d ? `${d}d ` : "") + `${pad(h)}h ${pad(m)}m` + (seconds ? ` ${pad(s)}s` : "");
 }
 function agoText(ts) {
   const min = Math.round((Date.now() - ts) / 60000);
@@ -138,7 +139,7 @@ export default {
               <button type="button" class="ghost" data-act="del" data-id="${b.id}">Delete</button></div>`;
       return `<article class="base s-${s}${example ? " example" : ""}">
         <div class="row-between"><div class="name">${example ? '<span class="tag">Example · </span>' : ""}${esc(b.name)}</div><span class="pill">${label}</span></div>
-        <div class="count">${left > 0 ? countHTML(left) : "00<small>h</small>00<small>m</small>"}</div>
+        <div class="count" data-ends="${b.endsAt}">${countHTML(left)}</div>
         <div class="bar" role="img" aria-label="${Math.round(pct)}% left since last refuel"><span style="width:${pct}%"></span></div>
         <div class="meta">
           <span>${left > 0 ? "Runs out" : "Ran out"}: <b>${fmt.format(new Date(b.endsAt))}</b></span>
@@ -167,7 +168,7 @@ export default {
       const needRefuel = sorted.filter((b) => b.endsAt - Date.now() <= WARN_H * 3600e3).length;
       $("dn-summary").innerHTML = `
         <div><div class="eyebrow">Next to run out</div><div class="who">${esc(next.name)}</div></div>
-        <div><div class="eyebrow">${left > 0 ? "Time left" : "Status"}</div><div class="big">${left > 0 ? countText(left) : "No power"}</div></div>
+        <div><div class="eyebrow">${left > 0 ? "Time left" : "Status"}</div><div class="big" ${left > 0 ? `data-ends-text="${next.endsAt}"` : ""}>${left > 0 ? countText(left, true) : "No power"}</div></div>
         <div><div class="eyebrow">Need refuel</div><div class="big">${needRefuel} of ${sorted.length}</div></div>`;
       $("dn-list").innerHTML = sorted.map((b) => card(b, false)).join("");
     }
@@ -319,8 +320,28 @@ export default {
       if (act.startsWith("del")) render();
     });
 
+    // Every second, move just the countdown numbers; redraw everything when a base changes status
+    // (e.g. Stable → Refuel soon) or every 30 s so the "Updated … ago" text stays current.
+    let lastStatuses = "";
+    let lastFull = 0;
+    const statuses = () => bases.map((b) => status(b.endsAt - Date.now())[0]).join();
+    function tick() {
+      const now = Date.now();
+      const st = statuses();
+      if (st !== lastStatuses || now - lastFull > 30_000) {
+        lastStatuses = st;
+        lastFull = now;
+        render();
+        return;
+      }
+      el.querySelectorAll("[data-ends]").forEach((n) => (n.innerHTML = countHTML(Number(n.dataset.ends) - now)));
+      el.querySelectorAll("[data-ends-text]").forEach((n) => (n.textContent = countText(Number(n.dataset.endsText) - now, true)));
+    }
+
     render();
-    const timer = setInterval(render, 20_000);
+    lastStatuses = statuses();
+    lastFull = Date.now();
+    const timer = setInterval(tick, 1000);
     const onVisibility = () => !document.hidden && render();
     document.addEventListener("visibilitychange", onVisibility);
 
