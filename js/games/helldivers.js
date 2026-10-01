@@ -1,5 +1,7 @@
 // Helldivers 2 — Galactic War status from the community API (https://api.helldivers2.dev).
 // The API asks every client to identify itself with these two headers and allows ~5 requests per 10 s.
+import { biomeArt } from "./helldivers-biomes.js";
+
 const API = "https://api.helldivers2.dev/api/v1";
 const HEADERS = {
   "X-Super-Client": "gamehub",
@@ -26,6 +28,7 @@ const TASK_VERBS = {
 const REWARDS = { 1: "Medals" };
 
 let planetNames = null; // index -> name, loaded only when a Major Order points at a planet
+let cache = null; // last good { war, orders, campaigns, at } — reused when switching tabs back and forth
 
 async function get(path) {
   const res = await fetch(API + path, { headers: HEADERS });
@@ -143,7 +146,11 @@ function hotPlanetHTML(campaigns) {
   if (!campaigns.length) return "";
   const top = campaigns[0].planet;
   const pp = planetProgress(top);
-  return `<section class="card">
+  return `<section class="card hot">
+    <figure class="biome-banner">
+      ${biomeArt(top)}
+      <figcaption>${esc(top.biome?.name || "Unknown biome")}</figcaption>
+    </figure>
     <div class="eyebrow">Most Helldivers deployed</div>
     <div class="row-between">
       <div class="planet-name">${esc(titleCase(top.name))}</div>
@@ -155,6 +162,7 @@ function hotPlanetHTML(campaigns) {
     </div>
     <div class="bar"><span style="width:${pp.pct.toFixed(1)}%"></span></div>
     <div class="mono" style="font-size:.9rem">${pp.pct.toFixed(2)}% ${pp.kind === "Defense" ? "defended" : "liberated"}</div>
+    ${top.biome?.description ? `<p class="biome-desc">${esc(top.biome.description)}</p>` : ""}
   </section>`;
 }
 
@@ -168,9 +176,12 @@ function frontsHTML(campaigns) {
         .map((c) => {
           const pp = planetProgress(c.planet);
           return `<li class="front">
+            ${biomeArt(c.planet, "biome-thumb")}
+            <div class="front-info">
             <div class="row-between"><span><b>${esc(titleCase(c.planet.name))}</b> · ${factionHTML(pp.enemy)}${pp.kind === "Defense" ? ' · <span class="pill">Defense</span>' : ""}</span>
               <span class="players">${nf.format(c.planet.statistics.playerCount)} divers</span></div>
             <div class="bar"><span style="width:${pp.pct.toFixed(1)}%"></span></div>
+            </div>
           </li>`;
         })
         .join("")}
@@ -204,7 +215,7 @@ export default {
         <div><div class="eyebrow">Galactic War</div><h1>Helldivers 2</h1></div>
         <div class="hd-divers"><div class="eyebrow">Helldivers active</div><div class="big" id="hd-count">—</div></div>
       </div>
-      <div class="row-between hd-status"><span class="muted" id="hd-updated">Loading war status…</span><button class="ghost" id="hd-refresh" type="button">Refresh</button></div>
+      <p class="error hd-status" id="hd-error" hidden></p>
       <div id="hd-body" class="wrap" style="padding:0;gap:20px"><section class="card skeleton">Contacting Super Earth High Command…</section></div>
       <p class="note">Live data from the community API at api.helldivers2.dev. Updates every minute while this tab is open.</p>`;
 
@@ -212,32 +223,33 @@ export default {
     let timer = null;
     let retry = null;
     let busy = false;
-    let lastOk = null;
     let lastTry = 0;
+
+    function draw({ war, orders, campaigns }) {
+      $("hd-count").textContent = nf.format(war.statistics.playerCount);
+      $("hd-body").innerHTML = majorOrderHTML(orders) + hotPlanetHTML(campaigns) + frontsHTML(campaigns) + statsHTML(war);
+      $("hd-error").hidden = true;
+    }
 
     async function refresh() {
       if (busy) return;
       busy = true;
       lastTry = Date.now();
       clearTimeout(retry);
-      $("hd-refresh").disabled = true;
       try {
         const [war, orders, campaigns] = await Promise.all([get("/war"), get("/assignments"), get("/campaigns")]);
         const needsPlanets = orders.some((mo) => mo.tasks.some((t) => t.valueTypes.includes(VT.PLANET) && taskValue(t, VT.PLANET)));
         if (needsPlanets) await loadPlanetNames().catch(() => null);
 
         campaigns.sort((a, b) => b.planet.statistics.playerCount - a.planet.statistics.playerCount);
-        $("hd-count").textContent = nf.format(war.statistics.playerCount);
-        $("hd-body").innerHTML = majorOrderHTML(orders) + hotPlanetHTML(campaigns) + frontsHTML(campaigns) + statsHTML(war);
-        lastOk = new Date();
-        $("hd-updated").textContent = `Updated ${lastOk.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}`;
+        cache = { war, orders, campaigns, at: new Date() };
+        draw(cache);
       } catch (e) {
-        const when = lastOk ? ` Showing data from ${lastOk.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}.` : "";
-        $("hd-updated").innerHTML = `<span class="error">${esc(e.message || "Could not reach the war API.")}</span>${when}`;
+        $("hd-error").textContent = e.message || "Could not reach the war API.";
+        $("hd-error").hidden = false;
         retry = setTimeout(refresh, 15_000);
       } finally {
         busy = false;
-        $("hd-refresh").disabled = false;
       }
     }
 
@@ -254,8 +266,12 @@ export default {
     }
     const onVisibility = () => (document.hidden ? stop() : start());
 
-    $("hd-refresh").addEventListener("click", refresh);
     document.addEventListener("visibilitychange", onVisibility);
+    if (cache) {
+      draw(cache);
+      lastTry = cache.at.getTime(); // skip the immediate fetch if the cached data is still fresh
+      if (Date.now() - lastTry > REFRESH_MS) lastTry = 0;
+    }
     start();
 
     return () => {

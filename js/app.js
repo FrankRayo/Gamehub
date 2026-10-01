@@ -2,7 +2,7 @@ import helldivers from "./games/helldivers.js";
 import dune from "./games/dune.js";
 
 // To add a game: create js/games/<game>.js exporting { id, name, mount(el) }, list it here,
-// and give it an accent under [data-game="<id>"] in styles.css.
+// and give it its own colors and fonts under [data-game="<id>"] in styles.css.
 // mount() may return a cleanup function that runs when the user switches tabs.
 const GAMES = [helldivers, dune];
 
@@ -28,7 +28,10 @@ function show() {
     else t.removeAttribute("aria-current");
   });
 
-  document.documentElement.dataset.game = game.id; // each game's accent color lives in styles.css
+  document.documentElement.dataset.game = game.id; // each game's look lives in styles.css
+  // Tint the phone's browser bar to match the tab's background.
+  const bg = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim();
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", bg);
   document.title = `${game.name} · GameHub`;
   view.innerHTML = "";
   cleanup = game.mount(view) || null;
