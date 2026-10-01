@@ -166,9 +166,17 @@ function hotPlanetHTML(campaigns) {
   </section>`;
 }
 
+const FRONTS_SHOWN = 8;
+let showAllFronts = false; // kept across refreshes and tab switches
+
 function frontsHTML(campaigns) {
-  const list = campaigns.slice(1, 9);
+  const others = campaigns.slice(1);
+  const list = showAllFronts ? others : others.slice(0, FRONTS_SHOWN);
   if (!list.length) return "";
+  const toggle =
+    others.length > FRONTS_SHOWN
+      ? `<button type="button" class="ghost fronts-toggle" data-act="toggle-fronts">${showAllFronts ? "Show fewer" : `Show all ${others.length} fronts`}</button>`
+      : "";
   return `<section class="card">
     <div class="row-between"><h2>Other active fronts</h2><span class="muted" style="font-size:.85rem">${campaigns.length} total</span></div>
     <ul class="fronts">
@@ -186,6 +194,7 @@ function frontsHTML(campaigns) {
         })
         .join("")}
     </ul>
+    ${toggle}
   </section>`;
 }
 
@@ -267,6 +276,11 @@ export default {
     const onVisibility = () => (document.hidden ? stop() : start());
 
     document.addEventListener("visibilitychange", onVisibility);
+    el.addEventListener("click", (e) => {
+      if (!e.target.closest('[data-act="toggle-fronts"]') || !cache) return;
+      showAllFronts = !showAllFronts;
+      draw(cache);
+    });
     if (cache) {
       draw(cache);
       lastTry = cache.at.getTime(); // skip the immediate fetch if the cached data is still fresh

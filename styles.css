@@ -191,6 +191,7 @@ input[type="number"] { font-family: var(--f-num); font-variant-numeric: tabular-
 .biome-desc { margin: 0; font-size: .85rem; color: var(--muted); max-width: 65ch; }
 .front { grid-template-columns: 76px minmax(0, 1fr); align-items: center; column-gap: 12px; }
 .front-info { display: grid; gap: 4px; min-width: 0; }
+.fronts-toggle { justify-self: center; color: var(--accent); }
 .biome-thumb { display: block; width: 76px; height: 44px; object-fit: cover; background: var(--track); }
 [data-game="helldivers"] .biome-banner { border-bottom: 2px solid var(--accent); }
 [data-game="helldivers"] .biome-thumb { clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%); }
